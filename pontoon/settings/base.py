@@ -148,6 +148,7 @@ INSTALLED_APPS = (
     "allauth.socialaccount.providers.github",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.gitlab",
+    "allauth.socialaccount.providers.discord",
     "notifications",
     "graphene_django",
     "webpack_loader",

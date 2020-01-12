@@ -36,6 +36,16 @@ RUN apt-get update \
     # Clean up what can be cleaned up.
     && apt-get autoremove -y
 
+ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.1.9/supercronic-linux-amd64 \
+    SUPERCRONIC=supercronic-linux-amd64 \
+    SUPERCRONIC_SHA1SUM=5ddf8ea26b56d4a7ff6faecdd8966610d5cb9d85
+
+RUN curl -fsSLO "$SUPERCRONIC_URL" \
+ && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
+ && chmod +x "$SUPERCRONIC" \
+ && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
+ && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
+
 WORKDIR /app
 
 # Install Pontoon Python requirements
@@ -44,9 +54,13 @@ RUN pip install -U 'pip>=8' && \
     pip install --no-cache-dir --require-hashes -r requirements/dev.txt && \
     pip install --no-cache-dir --require-hashes -r requirements/test.txt
 
+#Setting corn job
+RUN echo '*/5 * * * * /app/syc_git.sh' >> ./cronpy
+
 # Create the app user
-RUN groupadd -r --gid=1000 pontoon && useradd --no-log-init -r -m -g pontoon pontoon
+RUN groupadd -r --gid=1000 pontoon && useradd --no-log-init -u 1000 -r -m -g pontoon pontoon
 RUN chown -R pontoon:pontoon /app
+
 USER pontoon
 
 # Install node requirements
@@ -61,8 +75,10 @@ COPY --chown=pontoon:pontoon frontend/yarn.lock .
 RUN yarn install
 
 WORKDIR /app
+
 COPY ./docker/config/webapp.env .env
 COPY --chown=pontoon:pontoon . /app/
+#RUN  chmod 770 /app/syc_git.sh
 
 # Create the folder for front-end assets
 RUN mkdir -p assets

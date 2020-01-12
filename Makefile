@@ -62,7 +62,7 @@ setup: .docker-build
 	${DC} run webapp /app/docker/set_up_webapp.sh
 
 run: .docker-build
-	${DC} run --rm --service-ports webapp
+	${DC} run -v /home/sisiza/.ssh:/tmp/.ssh:z --rm --service-ports webapp
 
 clean:
 	rm .docker-build
