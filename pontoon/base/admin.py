@@ -45,13 +45,15 @@ class UserAdmin(AuthUserAdmin):
         """
         Save a user and log changes in its roles.
         """
-        add_groups, remove_groups = utils.get_m2m_changes(
-            obj.groups, form.cleaned_data["groups"]
-        )
-
         super(UserAdmin, self).save_model(request, obj, form, change)
 
-        log_user_groups(request.user, obj, (add_groups, remove_groups))
+        # Users can only be moved between groups upon editing, not creation
+        if "groups" in form.cleaned_data:
+            add_groups, remove_groups = utils.get_m2m_changes(
+                obj.groups, form.cleaned_data["groups"]
+            )
+
+            log_user_groups(request.user, obj, (add_groups, remove_groups))
 
 
 class ExternalResourceInline(admin.TabularInline):
@@ -245,6 +247,10 @@ class TranslationAdmin(admin.ModelAdmin):
     raw_id_fields = ("entity",)
 
 
+class CommentAdmin(admin.ModelAdmin):
+    raw_id_fields = ("translation",)
+
+
 class TranslationMemoryEntryAdmin(admin.ModelAdmin):
     search_fields = ["source", "target", "locale__name", "locale__code"]
     list_display = ("pk", "source", "target", "locale")
@@ -313,3 +319,4 @@ admin.site.register(models.Translation, TranslationAdmin)
 admin.site.register(models.TranslationMemoryEntry, TranslationMemoryEntryAdmin)
 admin.site.register(models.ChangedEntityLocale, ChangedEntityLocaleAdmin)
 admin.site.register(models.PermissionChangelog, UserRoleLogActionAdmin)
+admin.site.register(models.Comment, CommentAdmin)

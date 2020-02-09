@@ -1,5 +1,7 @@
-ARG python_version
-FROM python:${python_version}-stretch
+FROM python:3.7.6-stretch
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HGPYTHON3=1
@@ -58,7 +60,7 @@ RUN pip install -U 'pip>=8' && \
 RUN echo '*/5 * * * * /app/syc_git.sh' >> ./cronpy
 
 # Create the app user
-RUN groupadd -r --gid=1000 pontoon && useradd --no-log-init -u 1000 -r -m -g pontoon pontoon
+RUN groupadd -r --gid=${GROUP_ID} pontoon && useradd --uid=${USER_ID} --no-log-init -r -m -g pontoon pontoon
 RUN chown -R pontoon:pontoon /app
 
 USER pontoon

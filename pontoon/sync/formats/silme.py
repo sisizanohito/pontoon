@@ -15,7 +15,7 @@ from silme.format.ini import FormatParser as IniParser
 from silme.format.inc import FormatParser as IncParser
 from silme.format.properties import FormatParser as PropertiesParser
 
-from pontoon.sync import SyncError
+from pontoon.sync.exceptions import SyncError
 from pontoon.sync.utils import (
     create_parent_directory,
     escape_quotes,
@@ -74,10 +74,6 @@ class SilmeEntity(VCSTranslation):
 
     def __ne__(self, other):
         return not self.__eq__(other)
-
-    def __nonzero__(self):
-        # TODO: remove python2
-        return bool(self.strings)
 
     def __bool__(self):
         # python 3

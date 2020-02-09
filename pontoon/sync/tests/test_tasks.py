@@ -128,7 +128,7 @@ class SyncProjectTests(TestCase):
         sync_project(self.db_project.pk, self.sync_log.pk)
 
         log = ProjectSyncLog.objects.get(project=self.db_project)
-        assert_equal(self.mock_sync_translations.delay.call_args[0][1], log.pk)
+        assert_equal(self.mock_sync_translations.call_args[0][1], log.pk)
 
 
 class SyncTranslationsTests(FakeCheckoutTestCase):
@@ -365,13 +365,14 @@ class SyncExecutionTests(TestCase):
         """
 
         @serial_task(100)
-        def test_task(self, callback):
-            return callback()
+        def test_task(self, call_subtask):
+            if call_subtask:
+                return subtask()
 
-        def execute_second_inner_task():
-            return test_task.delay(lambda: None)
+        def subtask():
+            return test_task.delay()
 
-        first_call = test_task.delay(execute_second_inner_task)
+        first_call = test_task.delay(call_subtask=True)
         second_call = first_call.get()
 
         assert_true(first_call.successful())
@@ -411,10 +412,10 @@ class SyncExecutionTests(TestCase):
             assert_true(first_call.get(), 42)
             assert_true(second_call.get(), 24)
             mock_cache.add.assert_any_call(
-                CONTAINS("task_lock_key[param=42]"), ANY, timeout=3
+                CONTAINS("serial_task.sync[param=42]"), ANY, timeout=3
             )
             mock_cache.add.assert_any_call(
-                CONTAINS("task_lock_key[param=24]"), ANY, timeout=3
+                CONTAINS("serial_task.sync[param=24]"), ANY, timeout=3
             )
 
     def test_exception_during_sync(self):
