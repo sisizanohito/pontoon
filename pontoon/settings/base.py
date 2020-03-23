@@ -50,10 +50,10 @@ DATABASES = {
 }
 
 # Ensure that psycopg2 uses a secure SSL connection.
-if not DEV and not DEBUG:
-    if "OPTIONS" not in DATABASES["default"]:
-        DATABASES["default"]["OPTIONS"] = {}
-    DATABASES["default"]["OPTIONS"]["sslmode"] = "require"
+#if not DEV and not DEBUG:
+#    if "OPTIONS" not in DATABASES["default"]:
+#        DATABASES["default"]["OPTIONS"] = {}
+#    DATABASES["default"]["OPTIONS"]["sslmode"] = "require"
 
 FRONTEND_DIR = os.path.join(ROOT, "frontend")
 
