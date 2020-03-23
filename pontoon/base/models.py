@@ -10,6 +10,8 @@ import os.path
 import re
 
 import Levenshtein
+import warnings
+import django
 
 from collections import defaultdict
 from dirtyfields import DirtyFieldsMixin
@@ -17,12 +19,12 @@ from django.db.models.functions import Length, Substr, Cast
 from partial_index import PartialIndex, PQ
 from six.moves import reduce
 from six.moves.urllib.parse import urlencode, urlparse
+from bulk_update.helper import bulk_update
 
 from django.conf import settings
 from django.contrib.auth.models import User, Group
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.urlresolvers import reverse
 from django.core.validators import validate_email
 from django.db import models
 from django.db.models import (
@@ -37,6 +39,7 @@ from django.db.models import (
     ExpressionWrapper,
 )
 from django.templatetags.static import static
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.functional import cached_property
@@ -90,6 +93,12 @@ def combine_entity_filters(entities, filter_choices, filters, *args):
     # `operator.ior` is the pipe (|) Python operator, which turns into a logical OR
     # when used between django ORM query objects.
     return reduce(operator.ior, filters)
+
+
+def get_word_count(string):
+    """Compute the number of words in a given string.
+    """
+    return len(re.findall(r"[\w,.-]+", string))
 
 
 @property
@@ -260,7 +269,9 @@ def menu_notifications(self):
     if unread_count > count:
         count = unread_count
 
-    return self.notifications.prefetch_related("actor", "target")[:count]
+    return self.notifications.prefetch_related("actor", "target", "action_object")[
+        :count
+    ]
 
 
 @property
@@ -273,8 +284,12 @@ def serialized_notifications(self):
     if unread_count > count:
         count = unread_count
 
-    for notification in self.notifications.prefetch_related("actor", "target")[:count]:
+    for notification in self.notifications.prefetch_related(
+        "actor", "target", "action_object"
+    )[:count]:
         actor = None
+        description_safe = True
+
         if hasattr(notification.actor, "slug"):
             actor = {
                 "anchor": notification.actor.name,
@@ -293,20 +308,41 @@ def serialized_notifications(self):
 
         target = None
         if notification.target:
-            target = {
-                "anchor": notification.target.name,
-                "url": reverse(
-                    "pontoon.projects.project",
-                    kwargs={"slug": notification.target.slug},
-                ),
-            }
+            t = notification.target
+            # New string or Manual notification
+            if hasattr(t, "slug"):
+                target = {
+                    "anchor": t.name,
+                    "url": reverse(
+                        "pontoon.projects.project", kwargs={"slug": t.slug},
+                    ),
+                }
+
+            # Comment notifications
+            elif hasattr(t, "resource"):
+                description_safe = False
+                target = {
+                    "anchor": t.resource.project.name,
+                    "url": reverse(
+                        "pontoon.translate",
+                        kwargs={
+                            "locale": notification.action_object.code,
+                            "project": t.resource.project.slug,
+                            "resource": t.resource.path,
+                        },
+                    )
+                    + "?string={entity}".format(entity=t.pk),
+                }
 
         notifications.append(
             {
                 "id": notification.id,
                 "level": notification.level,
                 "unread": notification.unread,
-                "description": notification.description,
+                "description": {
+                    "content": notification.description,
+                    "safe": description_safe,
+                },
                 "verb": notification.verb,
                 "date": notification.timestamp.strftime("%b %d, %Y %H:%M"),
                 "date_iso": notification.timestamp.isoformat(),
@@ -1604,6 +1640,7 @@ class Repository(models.Model):
     # TODO: We should be able to remove this once we have persistent storage
     permalink_prefix = models.CharField(
         "Download prefix",
+        blank=True,
         max_length=2000,
         help_text="""
         A URL prefix for downloading localized files. For GitHub repositories,
@@ -2294,6 +2331,19 @@ class EntityQuerySet(models.QuerySet):
 
         translations.filter(pk__in=unreviewed_pks).update(active=True)
 
+    def get_or_create(self, defaults=None, **kwargs):
+        kwargs["word_count"] = get_word_count(kwargs["string"])
+        return super(EntityQuerySet, self).get_or_create(defaults=defaults, **kwargs)
+
+    def bulk_update(self, objs, update_fields=None, batch_size=None):
+        if django.VERSION[0] >= 2:
+            msg = "Django version is 2 or higher. Function bulk_update needs to be removed"
+            warnings.warn(msg, PendingDeprecationWarning)
+        if objs:
+            for obj in objs:
+                obj.word_count = get_word_count(obj.string)
+        return bulk_update(objs, update_fields=update_fields, batch_size=batch_size)
+
 
 @python_2_unicode_compatible
 class Entity(DirtyFieldsMixin, models.Model):
@@ -2307,6 +2357,7 @@ class Entity(DirtyFieldsMixin, models.Model):
     order = models.PositiveIntegerField(default=0)
     source = JSONField(blank=True, default=list)  # List of paths to source code files
     obsolete = models.BooleanField(default=False)
+    word_count = models.PositiveIntegerField(default=0)
 
     date_created = models.DateTimeField(default=timezone.now)
     date_obsoleted = models.DateTimeField(null=True, blank=True)
@@ -2336,6 +2387,10 @@ class Entity(DirtyFieldsMixin, models.Model):
 
     def __str__(self):
         return self.string
+
+    def save(self, *args, **kwargs):
+        self.word_count = get_word_count(self.string)
+        super(Entity, self).save(*args, **kwargs)
 
     def get_stats(self, locale):
         """
@@ -3259,6 +3314,47 @@ class TranslatedResourceQuerySet(models.QuerySet):
 
         return translated_resources.aggregated_stats()
 
+    def update_stats(self):
+        """
+        Update stats on a list of TranslatedResource.
+        """
+        self = self.prefetch_related("resource__project", "locale")
+
+        locales = Locale.objects.filter(translatedresources__in=self,).distinct()
+
+        projects = Project.objects.filter(
+            resources__translatedresources__in=self,
+        ).distinct()
+
+        projectlocales = ProjectLocale.objects.filter(
+            project__resources__translatedresources__in=self,
+            locale__translatedresources__in=self,
+        ).distinct()
+
+        for translated_resource in self:
+            translated_resource.calculate_stats(save=False)
+
+        bulk_update(
+            list(self),
+            update_fields=[
+                "total_strings",
+                "approved_strings",
+                "fuzzy_strings",
+                "strings_with_errors",
+                "strings_with_warnings",
+                "unreviewed_strings",
+            ],
+        )
+
+        for project in projects:
+            project.aggregate_stats()
+
+        for locale in locales:
+            locale.aggregate_stats()
+
+        for projectlocale in projectlocales:
+            projectlocale.aggregate_stats()
+
 
 class TranslatedResource(AggregatedStats):
     """
@@ -3425,7 +3521,19 @@ class TranslatedResource(AggregatedStats):
 class Comment(models.Model):
     author = models.ForeignKey(User)
     timestamp = models.DateTimeField(default=timezone.now)
-    translation = models.ForeignKey(Translation, related_name="comments")
+    translation = models.ForeignKey(
+        Translation,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        blank=True,
+        null=True,
+    )
+    locale = models.ForeignKey(
+        Locale, on_delete=models.CASCADE, related_name="comments", blank=True, null=True
+    )
+    entity = models.ForeignKey(
+        Entity, on_delete=models.CASCADE, related_name="comments", blank=True, null=True
+    )
     content = models.TextField()
 
     def __str__(self):
@@ -3441,3 +3549,15 @@ class Comment(models.Model):
             "content": self.content,
             "id": self.id,
         }
+
+    def save(self, *args, **kwargs):
+        """
+        Validate Comments before saving.
+        """
+        if not (
+            (self.translation and not self.locale and not self.entity)
+            or (not self.translation and self.locale and self.entity)
+        ):
+            raise ValidationError("Invalid comment arguments")
+
+        super(Comment, self).save(*args, **kwargs)

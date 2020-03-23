@@ -86,6 +86,8 @@ resourceprogress-ResourceProgress--missing = Missing
 
 comments-AddComment--input =
     .placeholder = Write a comment…
+comments-AddComment--submit-button = <glyph></glyph>
+    .title = Submit comment
 
 
 ## Editor Menu
@@ -99,13 +101,15 @@ editor-EditorMenu--button-clear = Clear
     .title = Clear Translation (Ctrl + Shift + Backspace)
 editor-EditorMenu--button-approve = Approve
     .title = Approve Translation (Enter)
+editor-EditorMenu--button-approving = <glyph></glyph>Approving
+    .title = Approving Translation…
 editor-EditorMenu--button-save = Save
     .title = Save Translation (Enter)
-editor-EditorMenu--button-saving = Saving
+editor-EditorMenu--button-saving = <glyph></glyph>Saving
     .title = Saving Translation…
 editor-EditorMenu--button-suggest = Suggest
     .title = Suggest Translation (Enter)
-editor-EditorMenu--button-suggesting = Suggesting
+editor-EditorMenu--button-suggesting = <glyph></glyph>Suggesting
     .title = Suggesting Translation…
 
 
@@ -194,6 +198,8 @@ entitydetails-EntityNavigation--previous = <glyph></glyph>Previous
 
 entitydetails-Helpers--machinery = Machinery
 entitydetails-Helpers--locales = Locales
+entitydetails-Helpers--comments = Comments
+entitydetails-Helpers--no-comments = No comments available.
 
 
 ## Entity Details Metadata
@@ -281,8 +287,8 @@ history-Translation--button-comment = Comment
     .title = Toggle translation comments
 
 history-Translation--button-comments = { $commentCount ->
-        [one] { $commentCount } Comment
-       *[other] { $commentCount } Comments
+        [one] <stress>{ $commentCount }</stress> Comment
+       *[other] <stress>{ $commentCount }</stress> Comments
     }
     .title = Toggle translation comments
 

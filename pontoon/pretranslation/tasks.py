@@ -2,29 +2,40 @@ import logging
 
 from django.db.models import Q, CharField, Value as V
 from django.db.models.functions import Concat
-
-from pontoon.base.models import Entity, TranslatedResource, Translation
+from django.conf import settings
+from pontoon.base.models import (
+    Project,
+    Entity,
+    TranslatedResource,
+    Translation,
+    ChangedEntityLocale,
+)
 from pontoon.pretranslation.pretranslate import (
     get_translations,
     update_changed_instances,
 )
+from pontoon.base.tasks import PontoonTask
+from pontoon.sync.core import serial_task
+from pontoon.checks.utils import bulk_run_checks
 
 
 log = logging.getLogger(__name__)
 
 
-def pretranslate(project, locales=None, entities=None):
+@serial_task(settings.SYNC_TASK_TIMEOUT, base=PontoonTask, lock_key="project={0}")
+def pretranslate(self, project_pk, locales=None, entities=None):
     """
     Identifies strings without any translations and any suggestions.
     Engages TheAlgorithm (bug 1552796) to gather pretranslations.
     Stores pretranslations as suggestions (approved=False) to DB.
 
-    :arg Project project: the project to be pretranslated
+    :arg project_pk: the pk of the project to be pretranslated
     :arg Queryset locales: the locales for the project to be pretranslated
     :arg Queryset entites: the entities for the project to be pretranslated
 
     :returns: None
     """
+    project = Project.objects.get(pk=project_pk)
 
     log.info("Fetching pretranslations for project {} started".format(project.name))
 
@@ -74,9 +85,7 @@ def pretranslate(project, locales=None, entities=None):
 
     translations = []
 
-    # To keep track of changed Locales and TranslatedResources
-    # Also, their latest_translation and stats count
-    locale_dict = {}
+    # To keep track of changed TranslatedResources and their latest_translation
     tr_dict = {}
 
     tr_filter = []
@@ -102,31 +111,25 @@ def pretranslate(project, locales=None, entities=None):
                     string=string,
                     user=user,
                     approved=False,
+                    fuzzy=True,
                     active=True,
                     plural_form=plural_form,
                 )
 
+                index += 1
                 translations.append(t)
 
-                index += 1
-
                 if locale_resource not in tr_dict:
-                    tr_dict[locale_resource] = [index, 0]
+                    tr_dict[locale_resource] = index
+
                     # Add query for fetching respective TranslatedResource.
                     tr_filter.append(
                         Q(locale__id=locale.id) & Q(resource__id=entity.resource.id)
                     )
 
-                if locale.code not in locale_dict:
-                    locale_dict[locale.code] = [locale, index, 0]
-
                 # Update the latest translation index
-                tr_dict[locale_resource][0] = index
-                locale_dict[locale.code][1] = index
+                tr_dict[locale_resource] = index
 
-                # Increment number of translations (used to adjust stats)
-                tr_dict[locale_resource][1] += 1
-                locale_dict[locale.code][2] += 1
         log.info("Fetching pretranslations for locale {} done".format(locale.code))
 
     if len(translations) == 0:
@@ -134,12 +137,23 @@ def pretranslate(project, locales=None, entities=None):
 
     translations = Translation.objects.bulk_create(translations)
 
-    # Update latest activity and unreviewed count for the project.
-    project.latest_translation = translations[-1]
-    project.unreviewed_strings += len(translations)
-    project.save(update_fields=["latest_translation", "unreviewed_strings"])
+    # Run checks on all translations
+    translation_pks = {translation.pk for translation in translations}
+    bulk_run_checks(Translation.objects.for_checks().filter(pk__in=translation_pks))
 
-    # Update latest activity and unreviewed count for changed instances.
-    update_changed_instances(tr_filter, tr_dict, locale_dict, translations)
+    # Mark translations as changed
+    changed_entities = {}
+    existing = ChangedEntityLocale.objects.values_list("entity", "locale").distinct()
+    for t in translations:
+        key = (t.entity.pk, t.locale.pk)
+        # Remove duplicate changes to prevent unique constraint violation
+        if key not in existing:
+            changed_entities[key] = ChangedEntityLocale(
+                entity=t.entity, locale=t.locale
+            )
+    ChangedEntityLocale.objects.bulk_create(changed_entities.values())
+
+    # Update latest activity and stats for changed instances.
+    update_changed_instances(tr_filter, tr_dict, translations)
 
     log.info("Fetching pretranslations for project {} done".format(project.name))
