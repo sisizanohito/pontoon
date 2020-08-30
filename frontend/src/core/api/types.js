@@ -34,6 +34,36 @@ export type TeamComment = TranslationComment;
 
 
 /**
+ * Types used within Slate editor for comments
+ */
+export type TextType = {|
+    text: string,
+|};
+
+export type MentionType = {|
+    type: string, 
+    character: string, 
+    url: string, 
+    children: Array<TextType>,
+|};
+
+export type InitialType = {|
+    type: string, 
+    children: Array<TextType>,
+|};
+
+/**
+ * All users for use in mentions suggestions within comments
+ */
+export type UsersList = {|
+    gravatar: string,
+    name: string,
+    url: string,
+    display: string,    
+|}
+
+
+/**
  * Term entry with translation.
  */
 export type TermType = {|
@@ -107,6 +137,7 @@ export type SourceType =
     | 'translation-memory'
     | 'google-translate'
     | 'microsoft-translator'
+    | 'systran-translate'
     | 'microsoft-terminology'
     | 'transvision'
     | 'caighdean'

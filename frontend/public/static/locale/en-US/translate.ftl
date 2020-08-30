@@ -86,6 +86,8 @@ resourceprogress-ResourceProgress--missing = Missing
 
 comments-AddComment--input =
     .placeholder = Write a comment…
+comments-AddComment--mention-avatar-alt = 
+    .alt = User Avatar 
 comments-AddComment--submit-button = <glyph></glyph>
     .title = Submit comment
 
@@ -406,18 +408,24 @@ machinery-GoogleTranslation--visit-google = Google Translate
     .title = Visit Google Translate
 
 
+## Machinery Microsoft Translation
+## Shows the translation source from Microsoft Translation.
+machinery-MicrosoftTranslation--visit-bing = Microsoft Translator
+    .title = Visit Microsoft Translator
+
+
+## Machinery Systran Translate
+## Shows the translation source from Systran Translate.
+machinery-SystranTranslate--visit-systran = Systran Translate
+    .title = Visit Systran Translate
+
+
 ## Machinery Microsoft Terminology
 ## Shows the translation source from Microsoft Terminology.
 machinery-MicrosoftTerminology--visit-microsoft = Microsoft
     .title =
         Visit Microsoft Terminology Service API.
         © 2018 Microsoft Corporation. All rights reserved.
-
-
-## Machinery Microsoft Translation
-## Shows the translation source from Microsoft Translation.
-machinery-MicrosoftTranslation--visit-bing = Microsoft Translator
-    .title = Visit Bing Translate
 
 
 ## Machinery Translation
@@ -557,9 +565,8 @@ resource-ResourceMenu--search-placeholder =
     .placeholder = Filter resources
 
 
-## Search
-## The search bar and filters menu.
-
+## Filters Panel
+## Shows a list of filters, used to filter the list of entities.
 search-FiltersPanel--heading-status = Translation Status
 search-FiltersPanel--heading-tags = Tags
 search-FiltersPanel--heading-extra = Extra Filters
@@ -594,7 +601,7 @@ search-TimeRangeFilter--edit-range = <glyph></glyph>Edit Range
 search-TimeRangeFilter--save-range = Save Range
 
 
-## User Avatar
+## Term
 ## Shows term entry with its metadata
 
 term-Term--for-example = E.g.
@@ -603,8 +610,10 @@ term-Term--for-example = E.g.
 ## User Avatar
 ## Shows user Avatar with alt text
 
-user-UserAvatar--anon-alt-text = Anonymous User
-user-UserAvatar--alt-text = User Profile
+user-UserAvatar--anon-alt-text = 
+    .alt = Anonymous User
+user-UserAvatar--alt-text = 
+    .alt = User Profile
 
 ## User Menu
 ## Shows user menu entries and options to sign in or out.
@@ -612,6 +621,7 @@ user-UserAvatar--alt-text = User Profile
 user-SignIn--sign-in = Sign in
 user-SignOut--sign-out = <glyph></glyph>Sign out
 
+user-UserMenu--download-terminology = <glyph></glyph>Download Terminology
 user-UserMenu--download-tm = <glyph></glyph>Download Translation Memory
 user-UserMenu--download-translations = <glyph></glyph>Download Translations
 user-UserMenu--upload-translations = <glyph></glyph>Upload Translations

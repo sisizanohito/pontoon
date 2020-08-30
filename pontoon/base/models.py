@@ -8,6 +8,7 @@ import math
 import operator
 import os.path
 import re
+import requests
 
 import Levenshtein
 import warnings
@@ -21,8 +22,9 @@ from six.moves.urllib.parse import quote, urlencode, urlparse
 from bulk_update.helper import bulk_update
 
 from django.conf import settings
-from django.contrib.auth.models import User, Group, UserManager
+from django.contrib.auth.models import User, Group
 from django.contrib.postgres.fields import ArrayField
+
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import models
@@ -289,7 +291,7 @@ def serialized_notifications(self):
         "actor", "target", "action_object"
     )[:count]:
         actor = None
-        description_safe = True
+        is_comment = False
 
         if hasattr(notification.actor, "slug"):
             actor = {
@@ -321,7 +323,7 @@ def serialized_notifications(self):
 
             # Comment notifications
             elif hasattr(t, "resource"):
-                description_safe = False
+                is_comment = True
                 target = {
                     "anchor": t.resource.project.name,
                     "url": reverse(
@@ -342,7 +344,7 @@ def serialized_notifications(self):
                 "unread": notification.unread,
                 "description": {
                     "content": notification.description,
-                    "safe": description_safe,
+                    "is_comment": is_comment,
                 },
                 "verb": notification.verb,
                 "date": notification.timestamp.strftime("%b %d, %Y %H:%M"),
@@ -356,14 +358,6 @@ def serialized_notifications(self):
         "has_unread": unread_count > 0,
         "notifications": notifications,
     }
-
-
-class UserProjectsManager(UserManager):
-    def filter_visibility(self, project):
-        """Return users that can view/access the project."""
-        if project.visibility == "public":
-            return self
-        return self.filter(is_superuser=True)
 
 
 User.add_to_class("profile_url", user_profile_url)
@@ -383,7 +377,6 @@ User.add_to_class("top_contributed_locale", top_contributed_locale)
 User.add_to_class("can_translate", can_translate)
 User.add_to_class("menu_notifications", menu_notifications)
 User.add_to_class("serialized_notifications", serialized_notifications)
-User.add_to_class("projects", UserProjectsManager())
 
 
 class PermissionChangelog(models.Model):
@@ -622,6 +615,26 @@ class Locale(AggregatedStats):
         """,
     )
 
+    # Fields used by optional SYSTRAN services
+    systran_translate_code = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="""
+        SYSTRAN maintains its own list of
+        <a href="https://platform.systran.net/index">supported locales</a>.
+        Choose a matching locale from the list or leave blank to disable
+        support for SYSTRAN machine translation service.
+        """,
+    )
+    systran_translate_profile = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="""
+        SYSTRAN Profile UUID to specify the engine trained on the en-locale language pair.
+        The field is updated automatically after the systran_translate_code field changes.
+        """,
+    )
+
     transvision = models.BooleanField(
         default=False,
         help_text="""
@@ -759,6 +772,7 @@ class Locale(AggregatedStats):
             "script": self.script,
             "google_translate_code": self.google_translate_code,
             "ms_translator_code": self.ms_translator_code,
+            "systran_translate_code": self.systran_translate_code,
             "ms_terminology_code": self.ms_terminology_code,
             "transvision": json.dumps(self.transvision),
         }
@@ -1043,6 +1057,55 @@ class Locale(AggregatedStats):
         )
 
         return details_list
+
+    def save(self, *args, **kwargs):
+        old = Locale.objects.get(pk=self.pk) if self.pk else None
+        super(Locale, self).save(*args, **kwargs)
+
+        # If SYSTRAN Translate code changes, update SYSTRAN Profile UUID.
+        if old is None or old.systran_translate_code == self.systran_translate_code:
+            return
+
+        if not self.systran_translate_code:
+            return
+
+        api_key = settings.SYSTRAN_TRANSLATE_API_KEY
+        server = settings.SYSTRAN_TRANSLATE_SERVER
+        profile_owner = settings.SYSTRAN_TRANSLATE_PROFILE_OWNER
+        if not (api_key or server or profile_owner):
+            return
+
+        url = "{SERVER}/translation/supportedLanguages".format(SERVER=server)
+
+        payload = {
+            "key": api_key,
+            "source": "en",
+            "target": self.systran_translate_code,
+        }
+
+        try:
+            r = requests.post(url, params=payload)
+            root = json.loads(r.content)
+
+            if "error" in root:
+                log.error(
+                    "Unable to retrieve SYSTRAN Profile UUID: {error}".format(
+                        error=root
+                    )
+                )
+                return
+
+            for languagePair in root["languagePairs"]:
+                for profile in languagePair["profiles"]:
+                    if profile["selectors"]["owner"] == profile_owner:
+                        self.systran_translate_profile = profile["id"]
+                        self.save(update_fields=["systran_translate_profile"])
+                        return
+
+        except requests.exceptions.RequestException as e:
+            log.error(
+                "Unable to retrieve SYSTRAN Profile UUID: {error}".format(error=e)
+            )
 
 
 class ProjectQuerySet(models.QuerySet):
@@ -2960,6 +3023,7 @@ class Translation(DirtyFieldsMixin, models.Model):
         ("translation-memory", "Translation Memory"),
         ("google-translate", "Google Translate"),
         ("microsoft-translator", "Microsoft Translator"),
+        ("systran-translate", "Systran Translate"),
         ("microsoft-terminology", "Microsoft"),
         ("transvision", "Mozilla"),
         ("caighdean", "Caighdean"),

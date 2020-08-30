@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import logging
+import re
 from datetime import datetime
 
 from django.conf import settings
@@ -539,6 +540,12 @@ def _send_add_comment_notifications(user, comment, entity, locale, translation):
             translations.values_list("unrejected_user__pk", flat=True)
         )
 
+    # Notify users, mentioned in a comment
+    usernames = re.findall(r"<a href=\"\/contributors/([\w.@+-]+)/\">.+</a>", comment)
+    recipients = recipients.union(
+        User.objects.filter(username__in=usernames).values_list("pk", flat=True)
+    )
+
     for recipient in User.objects.filter(pk__in=recipients).exclude(pk=user.pk):
         notify.send(
             user,
@@ -594,6 +601,26 @@ def add_comment(request):
     _send_add_comment_notifications(user, comment, entity, locale, translation)
 
     return JsonResponse({"status": True})
+
+
+@utils.require_AJAX
+@login_required(redirect_field_name="", login_url="/403")
+def get_users(request):
+    """Get all users."""
+    users = User.objects.all()
+    payload = []
+
+    for u in users:
+        payload.append(
+            {
+                "gravatar": u.gravatar_url(44),
+                "name": u.first_name or u.email,
+                "url": u.profile_url,
+                "display": u.name_or_email,
+            }
+        )
+
+    return JsonResponse(payload, safe=False)
 
 
 @utils.require_AJAX
