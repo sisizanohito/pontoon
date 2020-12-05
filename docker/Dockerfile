@@ -53,8 +53,8 @@ WORKDIR /app
 # Install Pontoon Python requirements
 COPY requirements/* /app/requirements/
 RUN pip install -U 'pip>=8' && \
-    pip install --no-cache-dir --require-hashes -r requirements/dev.txt && \
-    pip install --no-cache-dir --require-hashes -r requirements/test.txt
+    pip install --no-cache-dir --require-hashes --use-deprecated=legacy-resolver -r requirements/dev.txt && \
+    pip install --no-cache-dir --require-hashes --use-deprecated=legacy-resolver -r requirements/test.txt
 
 #Setting corn job
 RUN echo '*/5 * * * * /app/syc_git.sh' >> ./cronpy

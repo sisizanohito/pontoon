@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
+from unittest.mock import patch, call
 
 import pytest
-
-from mock import patch, call
 
 from pontoon.base.models import (
     get_word_count,
@@ -813,9 +811,9 @@ def test_lookup_collation(resource_a, locale_a):
         Translation.objects.filter(string__icontains_collate=(u"string", "C"))
     ) == set([translations[n] for n in [0, 3, 4]])
     # Compare the icontains_collate query with regular i_contains query
-    assert list(Translation.objects.filter(string__icontains=u"string")) == [
-        translations[n] for n in [0, 2, 3, 4]
-    ]
+    assert set(Translation.objects.filter(string__icontains=u"string")) == set(
+        [translations[n] for n in [0, 2, 3, 4]]
+    )
 
 
 @pytest.mark.django_db
@@ -992,9 +990,9 @@ def test_mgr_bulk_update(get_word_count_mock, admin, resource_a, locale_a):
     testEntitiesQuerySet = Entity.for_project_locale(
         admin, resource_a.project, locale_a
     )
-    updated_count = testEntitiesQuerySet.bulk_update(
+    testEntitiesQuerySet.bulk_update(
         objs,
-        update_fields=[
+        fields=[
             "resource",
             "string",
             "string_plural",
@@ -1008,4 +1006,3 @@ def test_mgr_bulk_update(get_word_count_mock, admin, resource_a, locale_a):
     )
 
     assert get_word_count_mock.call_count == 4
-    assert updated_count == len(objs)

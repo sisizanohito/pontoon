@@ -1,6 +1,7 @@
 .metadata {
     background-color: #3f4752;
-    color: #AAA;
+    color: #aaa;
+    flex-shrink: 0;
     font-size: 12px;
     font-style: italic;
     height: 20%;
@@ -25,12 +26,16 @@
     text-transform: uppercase;
 }
 
-.metadata p a {
-    color: #7BC876;
+.metadata div a {
+    color: #7bc876;
     text-decoration: none;
 }
 
-.metadata p .divider {
+.metadata .comment .content p {
+    display: inline-block;
+}
+
+.metadata div .divider {
     font-style: normal;
     font-weight: 100;
     margin: 0 3px;
@@ -41,6 +46,7 @@
     font-size: 14px;
     font-style: normal;
     line-height: 22px;
+    margin-top: -2px; /* Align with the source string comment button */
     padding-bottom: 6px;
     text-align: start;
     white-space: pre-wrap;
@@ -52,7 +58,7 @@
 
 .metadata .original .term {
     background: inherit;
-    border-bottom: 1px solid #7BC876;
+    border-bottom: 1px solid #7bc876;
     color: inherit;
     cursor: pointer;
     font-weight: normal;
@@ -68,7 +74,7 @@
 .metadata button {
     background: none;
     border: none;
-    color: #7BC876;
+    color: #7bc876;
     font-style: italic;
     padding: 0 0 0 2px;
 }

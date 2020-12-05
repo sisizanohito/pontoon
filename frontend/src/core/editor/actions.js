@@ -15,16 +15,24 @@ import type { Entity, SourceType } from 'core/api';
 import type { Locale } from 'core/locale';
 import type { FluentMessage } from 'core/utils/fluent/types';
 
-
-export const END_UPDATE_TRANSLATION: 'editor/END_UPDATE_TRANSLATION' = 'editor/END_UPDATE_TRANSLATION';
-export const RESET_FAILED_CHECKS: 'editor/RESET_FAILED_CHECKS' = 'editor/RESET_FAILED_CHECKS';
-export const RESET_SELECTION: 'editor/RESET_SELECTION' = 'editor/RESET_SELECTION';
-export const SET_INITIAL_TRANSLATION: 'editor/SET_INITIAL_TRANSLATION' = 'editor/SET_INITIAL_TRANSLATION';
-export const START_UPDATE_TRANSLATION: 'editor/START_UPDATE_TRANSLATION' = 'editor/START_UPDATE_TRANSLATION';
+export const END_UPDATE_TRANSLATION: 'editor/END_UPDATE_TRANSLATION' =
+    'editor/END_UPDATE_TRANSLATION';
+export const RESET_EDITOR: 'editor/RESET_EDITOR' = 'editor/RESET_EDITOR';
+export const RESET_FAILED_CHECKS: 'editor/RESET_FAILED_CHECKS' =
+    'editor/RESET_FAILED_CHECKS';
+export const RESET_SELECTION: 'editor/RESET_SELECTION' =
+    'editor/RESET_SELECTION';
+export const SET_INITIAL_TRANSLATION: 'editor/SET_INITIAL_TRANSLATION' =
+    'editor/SET_INITIAL_TRANSLATION';
+export const START_UPDATE_TRANSLATION: 'editor/START_UPDATE_TRANSLATION' =
+    'editor/START_UPDATE_TRANSLATION';
 export const UPDATE: 'editor/UPDATE' = 'editor/UPDATE';
-export const UPDATE_FAILED_CHECKS: 'editor/UPDATE_FAILED_CHECKS' = 'editor/UPDATE_FAILED_CHECKS';
-export const UPDATE_SELECTION: 'editor/UPDATE_SELECTION' = 'editor/UPDATE_SELECTION';
-export const UPDATE_MACHINERY_SOURCES: 'editor/UPDATE_MACHINERY_SOURCES' = 'editor/UPDATE_MACHINERY_SOURCES';
+export const UPDATE_FAILED_CHECKS: 'editor/UPDATE_FAILED_CHECKS' =
+    'editor/UPDATE_FAILED_CHECKS';
+export const UPDATE_SELECTION: 'editor/UPDATE_SELECTION' =
+    'editor/UPDATE_SELECTION';
+export const UPDATE_MACHINERY_SOURCES: 'editor/UPDATE_MACHINERY_SOURCES' =
+    'editor/UPDATE_MACHINERY_SOURCES';
 
 export type Translation = string | FluentMessage;
 
@@ -36,14 +44,16 @@ export type UpdateAction = {|
     +translation: Translation,
     +changeSource: string,
 |};
-export function update(translation: Translation, changeSource?: string): UpdateAction {
+export function update(
+    translation: Translation,
+    changeSource?: string,
+): UpdateAction {
     return {
         type: UPDATE,
         translation,
         changeSource: changeSource || 'internal',
     };
 }
-
 
 /**
  * Update the content that should replace the currently selected text in the
@@ -52,14 +62,18 @@ export function update(translation: Translation, changeSource?: string): UpdateA
 export type UpdateSelectionAction = {|
     +type: typeof UPDATE_SELECTION,
     +content: string,
+    +changeSource: string,
 |};
-export function updateSelection(content: string): UpdateSelectionAction {
+export function updateSelection(
+    content: string,
+    changeSource?: string,
+): UpdateSelectionAction {
     return {
         type: UPDATE_SELECTION,
         content,
+        changeSource: changeSource || 'internal',
     };
 }
-
 
 /**
  * Update machinerySources and machineryTranslation when copied from machinery tab.
@@ -80,7 +94,6 @@ export function updateMachinerySources(
     };
 }
 
-
 /**
  * Update the content that should replace the currently selected text in the
  * active editor.
@@ -89,13 +102,14 @@ export type InitialTranslationAction = {|
     +type: typeof SET_INITIAL_TRANSLATION,
     +translation: Translation,
 |};
-export function setInitialTranslation(translation: Translation): InitialTranslationAction {
+export function setInitialTranslation(
+    translation: Translation,
+): InitialTranslationAction {
     return {
         type: SET_INITIAL_TRANSLATION,
         translation,
     };
 }
-
 
 /**
  * Update failed checks in the active editor.
@@ -123,9 +137,8 @@ export function updateFailedChecks(
     };
 }
 
-
 /**
- * Reset content to default value.
+ * Reset selected content to default value.
  */
 export type ResetSelectionAction = {|
     +type: typeof RESET_SELECTION,
@@ -136,6 +149,17 @@ export function resetSelection(): ResetSelectionAction {
     };
 }
 
+/**
+ * Reset the whole editor's data to its initial value.
+ */
+export type ResetEditorAction = {|
+    +type: typeof RESET_EDITOR,
+|};
+export function reset(): ResetEditorAction {
+    return {
+        type: RESET_EDITOR,
+    };
+}
 
 /**
  * Reset failed checks to default value.
@@ -149,9 +173,8 @@ export function resetFailedChecks(): ResetFailedChecksAction {
     };
 }
 
-
 export type StartUpdateTranslationAction = {|
-   +type: typeof START_UPDATE_TRANSLATION,
+    +type: typeof START_UPDATE_TRANSLATION,
 |};
 function startUpdateTranslation(): StartUpdateTranslationAction {
     return {
@@ -159,16 +182,14 @@ function startUpdateTranslation(): StartUpdateTranslationAction {
     };
 }
 
-
 export type EndUpdateTranslationAction = {|
-   +type: typeof END_UPDATE_TRANSLATION,
+    +type: typeof END_UPDATE_TRANSLATION,
 |};
 function endUpdateTranslation(): EndUpdateTranslationAction {
     return {
         type: END_UPDATE_TRANSLATION,
     };
 }
-
 
 /**
  * Save the current translation.
@@ -185,7 +206,7 @@ export function sendTranslation(
     ignoreWarnings: ?boolean,
     machinerySources: Array<SourceType>,
 ): Function {
-    return async dispatch => {
+    return async (dispatch) => {
         NProgress.start();
         dispatch(startUpdateTranslation());
 
@@ -203,15 +224,21 @@ export function sendTranslation(
 
         if (content.failedChecks) {
             dispatch(updateFailedChecks(content.failedChecks, 'submitted'));
-        }
-        else if (content.same) {
+        } else if (content.same) {
             // The translation that was provided is the same as an existing
             // translation for that entity.
-            dispatch(notification.actions.add(notification.messages.SAME_TRANSLATION));
-        }
-        else if (content.status) {
+            dispatch(
+                notification.actions.add(
+                    notification.messages.SAME_TRANSLATION,
+                ),
+            );
+        } else if (content.status) {
             // Notify the user of the change that happened.
-            dispatch(notification.actions.add(notification.messages.TRANSLATION_SAVED));
+            dispatch(
+                notification.actions.add(
+                    notification.messages.TRANSLATION_SAVED,
+                ),
+            );
 
             // Ignore existing unsavedchanges because they are saved now.
             dispatch(unsavedchanges.actions.ignore());
@@ -220,8 +247,8 @@ export function sendTranslation(
                 entitiesActions.updateEntityTranslation(
                     entity.pk,
                     pluralForm,
-                    content.translation
-                )
+                    content.translation,
+                ),
             );
 
             // Update stats in the filter panel and resource menu if possible.
@@ -232,7 +259,7 @@ export function sendTranslation(
                         entity.path,
                         content.stats.approved,
                         content.stats.warnings,
-                    )
+                    ),
                 );
             }
 
@@ -246,17 +273,18 @@ export function sendTranslation(
                     pluralForm,
                     locale,
                 );
+                dispatch(reset());
             }
         }
 
         dispatch(endUpdateTranslation());
         NProgress.done();
-    }
+    };
 }
-
 
 export default {
     endUpdateTranslation,
+    reset,
     resetFailedChecks,
     resetSelection,
     sendTranslation,

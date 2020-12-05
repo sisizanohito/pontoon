@@ -1,12 +1,9 @@
-from __future__ import absolute_import
-
 import functools
 import os
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
-
-from mock import patch
 
 from pontoon.base.models import ProjectLocale, Project
 from pontoon.test.factories import (

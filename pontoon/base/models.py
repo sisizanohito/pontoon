@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, unicode_literals
-
 import hashlib
 import json
 import logging
@@ -11,15 +9,12 @@ import re
 import requests
 
 import Levenshtein
-import warnings
-import django
 
 from collections import defaultdict
 from dirtyfields import DirtyFieldsMixin
 from django.db.models.functions import Length, Substr, Cast
-from six.moves import reduce
-from six.moves.urllib.parse import quote, urlencode, urlparse
-from bulk_update.helper import bulk_update
+from functools import reduce
+from urllib.parse import quote, urlencode, urlparse
 
 from django.conf import settings
 from django.contrib.auth.models import User, Group
@@ -41,7 +36,6 @@ from django.db.models import (
 )
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import python_2_unicode_compatible
 from django.utils.functional import cached_property
 
 from guardian.shortcuts import get_objects_for_user
@@ -360,6 +354,16 @@ def serialized_notifications(self):
     }
 
 
+def user_serialize(self):
+    """ Serialize Project contact """
+
+    return {
+        "avatar": self.gravatar_url_small,
+        "name": self.name_or_email,
+        "url": self.profile_url,
+    }
+
+
 User.add_to_class("profile_url", user_profile_url)
 User.add_to_class("gravatar_url", user_gravatar_url)
 User.add_to_class("gravatar_url_small", user_gravatar_url_small)
@@ -377,6 +381,7 @@ User.add_to_class("top_contributed_locale", top_contributed_locale)
 User.add_to_class("can_translate", can_translate)
 User.add_to_class("menu_notifications", menu_notifications)
 User.add_to_class("serialized_notifications", serialized_notifications)
+User.add_to_class("serialize", user_serialize)
 
 
 class PermissionChangelog(models.Model):
@@ -563,7 +568,6 @@ class LocaleQuerySet(models.QuerySet):
         return AggregatedStats.get_top_instances(self)
 
 
-@python_2_unicode_compatible
 class Locale(AggregatedStats):
     code = models.CharField(max_length=20, unique=True)
 
@@ -1134,14 +1138,17 @@ class ProjectQuerySet(models.QuerySet):
         """
         return self.available().filter(system_project=False)
 
+    def force_syncable(self):
+        """
+        Projects that can be force-synced are not disabled and use repository as their data source type.
+        """
+        return self.filter(disabled=False, data_source="repository")
+
     def syncable(self):
         """
-        Syncable projects are not disabled, don't have sync disabled and use
-        repository as their data source type.
+        Syncable projects are same as force-syncable, but must not have sync disabled.
         """
-        return self.filter(
-            disabled=False, sync_disabled=False, data_source="repository",
-        )
+        return self.force_syncable().filter(sync_disabled=False)
 
     def prefetch_project_locale(self, locale):
         """
@@ -1181,7 +1188,6 @@ PRIORITY_CHOICES = (
 )
 
 
-@python_2_unicode_compatible
 class Project(AggregatedStats):
     name = models.CharField(max_length=128, unique=True)
     slug = models.SlugField(unique=True)
@@ -1327,6 +1333,7 @@ class Project(AggregatedStats):
             "width": self.width or "",
             "links": self.links or "",
             "langpack_url": self.langpack_url or "",
+            "contact": self.contact.serialize() if self.contact else None,
         }
 
     def save(self, *args, **kwargs):
@@ -1530,7 +1537,9 @@ class Project(AggregatedStats):
 
 class UserProfile(models.Model):
     # This field is required.
-    user = models.OneToOneField(User, models.CASCADE, related_name="profile")
+    user = models.OneToOneField(
+        User, models.CASCADE, related_name="profile", primary_key=True
+    )
     # Other fields here.
     quality_checks = models.BooleanField(default=True)
     force_suggestions = models.BooleanField(default=False)
@@ -1558,7 +1567,6 @@ class UserProfile(models.Model):
         return sorted(locales, key=lambda locale: self.locales_order.index(locale.pk))
 
 
-@python_2_unicode_compatible
 class ExternalResource(models.Model):
     """
     Represents links to external project resources like staging websites,
@@ -1754,13 +1762,15 @@ class Repository(models.Model):
 
     # TODO: We should be able to remove this once we have persistent storage
     permalink_prefix = models.CharField(
-        "Download prefix",
+        "Download prefix or path to TOML file",
         blank=True,
         max_length=2000,
         help_text="""
         A URL prefix for downloading localized files. For GitHub repositories,
         select any localized file on GitHub, click Raw and replace locale code
-        and the following bits in the URL with `{locale_code}`.
+        and the following bits in the URL with `{locale_code}`. If you use a
+        project configuration file, you need to provide the path to the raw TOML
+        file on GitHub.
     """,
     )
 
@@ -1993,7 +2003,6 @@ class ResourceQuerySet(models.QuerySet):
         return self.filter(format__in=Resource.ASYMMETRIC_FORMATS)
 
 
-@python_2_unicode_compatible
 class Resource(models.Model):
     project = models.ForeignKey(Project, models.CASCADE, related_name="resources")
     path = models.TextField()  # Path to localization file
@@ -2077,7 +2086,6 @@ class Resource(models.Model):
             return path_format
 
 
-@python_2_unicode_compatible
 class Subpage(models.Model):
     project = models.ForeignKey(Project, models.CASCADE)
     name = models.CharField(max_length=128)
@@ -2450,17 +2458,15 @@ class EntityQuerySet(models.QuerySet):
         kwargs["word_count"] = get_word_count(kwargs["string"])
         return super(EntityQuerySet, self).get_or_create(defaults=defaults, **kwargs)
 
-    def bulk_update(self, objs, update_fields=None, batch_size=None):
-        if django.VERSION[0] >= 2:
-            msg = "Django version is 2 or higher. Function bulk_update needs to be removed"
-            warnings.warn(msg, PendingDeprecationWarning)
-        if objs:
+    def bulk_update(self, objs, fields, batch_size=None):
+        if "string" in fields:
             for obj in objs:
                 obj.word_count = get_word_count(obj.string)
-        return bulk_update(objs, update_fields=update_fields, batch_size=batch_size)
+            if "word_count" not in fields:
+                fields.append("word_count")
+        super().bulk_update(objs, fields=fields, batch_size=batch_size)
 
 
-@python_2_unicode_compatible
 class Entity(DirtyFieldsMixin, models.Model):
     resource = models.ForeignKey(Resource, models.CASCADE, related_name="entities")
     string = models.TextField()
@@ -2964,7 +2970,6 @@ class TranslationQuerySet(models.QuerySet):
         return translations
 
 
-@python_2_unicode_compatible
 class Translation(DirtyFieldsMixin, models.Model):
     entity = models.ForeignKey(Entity, models.CASCADE)
     locale = models.ForeignKey(Locale, models.CASCADE)
@@ -3525,9 +3530,9 @@ class TranslatedResourceQuerySet(models.QuerySet):
         for translated_resource in self:
             translated_resource.calculate_stats(save=False)
 
-        bulk_update(
+        TranslatedResource.objects.bulk_update(
             list(self),
-            update_fields=[
+            fields=[
                 "total_strings",
                 "approved_strings",
                 "fuzzy_strings",
@@ -3726,6 +3731,7 @@ class Comment(models.Model):
         Entity, models.CASCADE, related_name="comments", blank=True, null=True
     )
     content = models.TextField()
+    pinned = models.BooleanField(default=False)
 
     def __str__(self):
         return self.content
@@ -3738,6 +3744,7 @@ class Comment(models.Model):
             "created_at": self.timestamp.strftime("%b %d, %Y %H:%M"),
             "date_iso": self.timestamp.isoformat(),
             "content": self.content,
+            "pinned": self.pinned,
             "id": self.id,
         }
 

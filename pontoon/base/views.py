@@ -1,8 +1,9 @@
-from __future__ import absolute_import
-
 import logging
 import re
+
+from collections import defaultdict
 from datetime import datetime
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib import messages
@@ -27,7 +28,6 @@ from django.views.decorators.http import condition, require_POST
 from django.views.generic.edit import FormView
 
 from notifications.signals import notify
-from six.moves.urllib.parse import urlparse
 
 from pontoon.actionlog.utils import log_action
 from pontoon.base import forms
@@ -457,8 +457,10 @@ def get_team_comments(request):
 
     entity = get_object_or_404(Entity, pk=entity)
     locale = get_object_or_404(Locale, code=locale)
-    comments = Comment.objects.filter(entity=entity, locale=locale).order_by(
-        "timestamp"
+    comments = (
+        Comment.objects.filter(entity=entity)
+        .filter(Q(locale=locale) | Q(pinned=True))
+        .order_by("timestamp")
     )
 
     payload = [c.serialize() for c in comments]
@@ -557,13 +559,47 @@ def _send_add_comment_notifications(user, comment, entity, locale, translation):
         )
 
 
+def _send_pin_comment_notifications(user, comment):
+    # When pinning a comment, notify:
+    #   - authors of existing translations across all locales
+    #   - reviewers of existing translations across all locales
+    recipient_data = defaultdict(list)
+    entity = comment.entity
+    translations = Translation.objects.filter(entity=entity)
+
+    for t in translations:
+        for u in (
+            t.user,
+            t.approved_user,
+            t.unapproved_user,
+            t.rejected_user,
+            t.unrejected_user,
+        ):
+            if u:
+                recipient_data[u.pk].append(t.locale.pk)
+
+    for recipient in User.objects.filter(pk__in=recipient_data.keys()).exclude(
+        pk=user.pk
+    ):
+        # Send separate notification for each locale (which results in links to corresponding translate views)
+        for locale in Locale.objects.filter(pk__in=recipient_data[recipient.pk]):
+            notify.send(
+                user,
+                recipient=recipient,
+                verb="has pinned a comment in",
+                action_object=locale,
+                target=entity,
+                description=comment.content,
+            )
+
+
 @require_POST
 @utils.require_AJAX
 @login_required(redirect_field_name="", login_url="/403")
 @transaction.atomic
 def add_comment(request):
     """Add a comment."""
-    form = forms.AddCommentsForm(request.POST)
+    form = forms.AddCommentForm(request.POST)
     if not form.is_valid():
         return JsonResponse(
             {
@@ -603,20 +639,61 @@ def add_comment(request):
     return JsonResponse({"status": True})
 
 
+@login_required(redirect_field_name="", login_url="/403")
+@require_POST
+@transaction.atomic
+def pin_comment(request):
+    """ Update a comment as pinned """
+    comment_id = request.POST.get("comment_id", None)
+    if not comment_id:
+        return JsonResponse({"status": False, "message": "Bad Request"}, status=400)
+
+    comment = get_object_or_404(Comment, id=comment_id)
+
+    comment.pinned = True
+    comment.save()
+
+    _send_pin_comment_notifications(request.user, comment)
+
+    return JsonResponse({"status": True})
+
+
+@login_required(redirect_field_name="", login_url="/403")
+@require_POST
+@transaction.atomic
+def unpin_comment(request):
+    """ Update a comment as unpinned """
+    comment_id = request.POST.get("comment_id", None)
+    if not comment_id:
+        return JsonResponse({"status": False, "message": "Bad Request"}, status=400)
+
+    comment = get_object_or_404(Comment, id=comment_id)
+
+    comment.pinned = False
+    comment.save()
+
+    return JsonResponse({"status": True})
+
+
 @utils.require_AJAX
 @login_required(redirect_field_name="", login_url="/403")
 def get_users(request):
     """Get all users."""
-    users = User.objects.all()
+    users = (
+        User.objects
+        # Exclude system users
+        .exclude(email__regex=r"^pontoon-(\w+)@example.com$")
+        # Exclude deleted users
+        .exclude(email__regex=r"^deleted-user-(\w+)@example.com$")
+    )
     payload = []
 
     for u in users:
         payload.append(
             {
                 "gravatar": u.gravatar_url(44),
-                "name": u.first_name or u.email,
+                "name": u.name_or_email,
                 "url": u.profile_url,
-                "display": u.name_or_email,
             }
         )
 
@@ -657,7 +734,7 @@ def perform_checks(request):
 
 
 @transaction.atomic
-def download(request):
+def download_translations(request):
     """Download translated resource."""
     try:
         slug = request.GET["slug"]
@@ -673,7 +750,10 @@ def download(request):
 
     response = HttpResponse()
     response.content = content
-    response["Content-Type"] = "text/plain"
+    if filename.endswith(".zip"):
+        response["Content-Type"] = "application/zip"
+    else:
+        response["Content-Type"] = "text/plain"
     response["Content-Disposition"] = "attachment; filename=" + filename
 
     return response
@@ -718,7 +798,7 @@ def upload(request):
 
 
 @condition(etag_func=None)
-def download_translation_memory(request, locale, slug, filename):
+def download_translation_memory(request, locale, slug):
     locale = get_object_or_404(Locale, code=locale)
 
     if slug.lower() == "all-projects":

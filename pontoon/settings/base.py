@@ -1,6 +1,4 @@
 """Django settings for Pontoon."""
-from __future__ import absolute_import
-
 import re
 import os
 import socket
@@ -154,9 +152,7 @@ INSTALLED_APPS = (
     "django.contrib.sites",
     # Third-party apps, patches, fixes
     "django_jinja",
-    "django_nose",
     "pipeline",
-    "session_csrf",
     "guardian",
     "corsheaders",
     "allauth",
@@ -185,7 +181,7 @@ MIDDLEWARE = (
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "session_csrf.CsrfMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "csp.middleware.CSPMiddleware",
@@ -197,7 +193,6 @@ CONTEXT_PROCESSORS = (
     "django.template.context_processors.debug",
     "django.template.context_processors.media",
     "django.template.context_processors.request",
-    "session_csrf.context_processor",
     "django.contrib.messages.context_processors.messages",
     "pontoon.base.context_processors.globals",
 )
@@ -266,9 +261,6 @@ AUTHENTICATION_BACKENDS = [
     "guardian.backends.ObjectPermissionBackend",
 ]
 
-# This variable is required by django-guardian.
-# App supports giving permissions for anonymous users.
-ANONYMOUS_USER_ID = -1
 GUARDIAN_RAISE_403 = True
 
 PIPELINE_CSS = {
@@ -308,6 +300,7 @@ PIPELINE_CSS = {
             "css/contributors.css",
             "css/heading_info.css",
             "css/info.css",
+            "css/download_selector.css",
         ),
         "output_filename": "css/localization.min.css",
     },
@@ -319,6 +312,7 @@ PIPELINE_CSS = {
         "source_filenames": (
             "css/table.css",
             "css/double_list_selector.css",
+            "css/download_selector.css",
             "css/contributors.css",
             "css/heading_info.css",
             "css/team.css",
@@ -534,8 +528,8 @@ STATICFILES_DIRS = [
 
 # Set ALLOWED_HOSTS based on SITE_URL setting.
 def _allowed_hosts():
+    from urllib.parse import urlparse
     from django.conf import settings
-    from six.moves.urllib.parse import urlparse
 
     host = urlparse(settings.SITE_URL).netloc  # Remove protocol and path
     result = [host]
@@ -595,17 +589,6 @@ if os.environ.get("DJANGO_SQL_LOG", False):
         "handlers": ["console"],
     }
 
-# Tests
-TEST_RUNNER = "django_nose.NoseTestSuiteRunner"
-NOSE_ARGS = [
-    "--logging-filter=-factory,-django.db,-raygun4py",
-    "--logging-clear-handlers",
-]
-
-# Disable nose-progressive on CI due to ugly output.
-if not os.environ.get("CI", False):
-    NOSE_ARGS.append("--with-progressive")
-
 # General auth settings
 LOGIN_URL = "/"
 LOGIN_REDIRECT_URL = "/"
@@ -616,8 +599,8 @@ LOGIN_REDIRECT_URL_FAILURE = "/"
 # everything.
 ENGAGE_ROBOTS = False
 
-# Always generate a CSRF token for anonymous users.
-ANON_ALWAYS = True
+# Store the CSRF token in the user's session instead of in a cookie.
+CSRF_USE_SESSIONS = True
 
 # Set X-Frame-Options to DENY by default on all responses.
 X_FRAME_OPTIONS = "DENY"
@@ -642,8 +625,8 @@ SECURE_SSL_REDIRECT = not (DEBUG or os.environ.get("CI", False))
 
 # Content-Security-Policy headers
 CSP_DEFAULT_SRC = ("'none'",)
-CSP_CHILD_SRC = ("https:",)
-CSP_FRAME_SRC = ("https:",)  # Older browsers
+CSP_FRAME_SRC = ("https:",)
+CSP_WORKER_SRC = ("https:",)
 CSP_CONNECT_SRC = (
     "'self'",
     "https://bugzilla.mozilla.org/rest/bug",
@@ -674,7 +657,7 @@ CSP_STYLE_SRC = (
 # Needed if site not hosted on HTTPS domains (like local setup)
 if not (HEROKU_DEMO or SITE_URL.startswith("https")):
     CSP_IMG_SRC = CSP_IMG_SRC + ("http://www.gravatar.com/avatar/",)
-    CSP_CHILD_SRC = CSP_FRAME_SRC = CSP_FRAME_SRC + ("http:",)
+    CSP_WORKER_SRC = CSP_FRAME_SRC = CSP_FRAME_SRC + ("http:",)
 
 # For absolute urls
 try:
@@ -751,7 +734,7 @@ except ValueError:
 
 SYNC_LOG_RETENTION = 90  # days
 
-MANUAL_SYNC = os.environ.get("MANUAL_SYNC", "False") != "False"
+MANUAL_SYNC = os.environ.get("MANUAL_SYNC", "True") != "False"
 
 # Celery
 
@@ -779,7 +762,7 @@ CELERY_ACCEPT_CONTENT = ["pickle"]
 # For the sake of integration with other sites,
 # some of javascript files (e.g. pontoon.js)
 # require Access-Control-Allow-Origin header to be set as '*'.
-CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/(pontoon\.js|graphql/?)$"
 
 SOCIALACCOUNT_ENABLED = True
@@ -846,3 +829,6 @@ DJANGO_NOTIFICATIONS_CONFIG = {
 
 # Maximum number of read notifications to display in the notifications menu
 NOTIFICATIONS_MAX_COUNT = 7
+
+# Number of events displayed on the Contributor's timeline per page.
+CONTRIBUTORS_TIMELINE_EVENTS_PER_PAGE = 10

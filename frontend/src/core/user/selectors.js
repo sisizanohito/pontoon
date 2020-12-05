@@ -2,30 +2,31 @@
 
 import { createSelector } from 'reselect';
 
-import * as navigation from 'core/navigation';
+import { NAME as LOCALE_NAME } from 'core/locale';
+import { NAME as PROJECT_NAME } from 'core/project';
 
 import { NAME } from '.';
 
-import type { NavigationParams } from 'core/navigation';
+import type { LocaleState } from 'core/locale';
+import type { ProjectState } from 'core/project';
 import type { UserState } from 'core/user';
 
-
 const userSelector = (state): UserState => state[NAME];
-
+const localeSelector = (state): LocaleState => state[LOCALE_NAME];
+const projectSelector = (state): ProjectState => state[PROJECT_NAME];
 
 export function _isTranslator(
     user: UserState,
-    parameters: NavigationParams
+    locale: LocaleState,
+    project: ProjectState,
 ): boolean {
-    const locale = parameters.locale;
-    const project = parameters.project;
-    const localeProject = locale + "-" + project;
+    const localeProject = locale.code + '-' + project.slug;
 
     if (!user.isAuthenticated) {
         return false;
     }
 
-    if (user.managerForLocales.indexOf(locale) !== -1) {
+    if (user.managerForLocales.indexOf(locale.code) !== -1) {
         return true;
     }
 
@@ -33,9 +34,8 @@ export function _isTranslator(
         return user.translatorForProjects[localeProject];
     }
 
-    return user.translatorForLocales.indexOf(locale) !== -1;
+    return user.translatorForLocales.indexOf(locale.code) !== -1;
 }
-
 
 /**
  * Return true if the user has translator permission for the current project
@@ -43,10 +43,10 @@ export function _isTranslator(
  */
 export const isTranslator: Function = createSelector(
     userSelector,
-    navigation.selectors.getNavigationParams,
-    _isTranslator
+    localeSelector,
+    projectSelector,
+    _isTranslator,
 );
-
 
 export default {
     isTranslator,

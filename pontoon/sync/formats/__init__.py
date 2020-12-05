@@ -3,8 +3,6 @@ Parsing resource files.
 
 See base.py for the ParsedResource base class.
 """
-from __future__ import absolute_import
-
 import os.path
 
 from pontoon.sync.formats import (
@@ -34,6 +32,22 @@ SUPPORTED_FORMAT_PARSERS = {
     ".xliff": xliff.parse,
     ".xml": compare_locales.parse,
 }
+
+
+def are_compatible_formats(extension_a, extension_b):
+    """
+    Return True if given file extensions belong to the same file format.
+    We test that by comparing parsers used by each file extenion.
+    Note that some formats (e.g. Gettext, XLIFF) use multiple file extensions.
+    """
+    try:
+        return (
+            SUPPORTED_FORMAT_PARSERS[extension_a]
+            == SUPPORTED_FORMAT_PARSERS[extension_b]
+        )
+    # File extension not supported
+    except KeyError:
+        return False
 
 
 def parse(path, source_path=None, locale=None):

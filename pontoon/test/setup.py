@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import pytest
 
 from django.db import connection
@@ -9,7 +7,7 @@ from django.db.utils import ProgrammingError
 @pytest.fixture(scope="session")
 def tests_use_db(request):
     """Check if any of the tests in this run require db setup"""
-    return any(item for item in request.node.items if item.get_marker("django_db"))
+    return any(item.get_closest_marker("django_db") for item in request.node.items)
 
 
 @pytest.fixture(autouse=True, scope="session")

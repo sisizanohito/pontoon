@@ -5,6 +5,7 @@ import {
     END_UPDATE_TRANSLATION,
     RESET_FAILED_CHECKS,
     RESET_SELECTION,
+    RESET_EDITOR,
     SET_INITIAL_TRANSLATION,
     START_UPDATE_TRANSLATION,
     UPDATE,
@@ -17,6 +18,7 @@ import type {
     FailedChecks,
     EndUpdateTranslationAction,
     InitialTranslationAction,
+    ResetEditorAction,
     ResetFailedChecksAction,
     ResetSelectionAction,
     StartUpdateTranslationAction,
@@ -27,18 +29,17 @@ import type {
     UpdateMachinerySourcesAction,
 } from './actions';
 
-
 type Action =
     | EndUpdateTranslationAction
     | InitialTranslationAction
+    | ResetEditorAction
     | ResetFailedChecksAction
     | ResetSelectionAction
     | StartUpdateTranslationAction
     | UpdateAction
     | UpdateFailedChecksAction
     | UpdateSelectionAction
-    | UpdateMachinerySourcesAction
-;
+    | UpdateMachinerySourcesAction;
 
 export type EditorState = {|
     +translation: Translation,
@@ -79,7 +80,6 @@ export type EditorState = {|
     +isRunningRequest: boolean,
 |};
 
-
 /**
  * Return a list of failed check messages of a given type.
  */
@@ -101,11 +101,10 @@ function extractFailedChecksOfType(
     return extractedFailedChecks;
 }
 
-
 const initial: EditorState = {
     translation: '',
     initialTranslation: '',
-    changeSource: 'internal',
+    changeSource: 'reset',
     machinerySources: [],
     machineryTranslation: '',
     selectionReplacementContent: '',
@@ -135,15 +134,21 @@ export default function reducer(
         case UPDATE_FAILED_CHECKS:
             return {
                 ...state,
-                errors: extractFailedChecksOfType(action.failedChecks, 'Errors'),
-                warnings: extractFailedChecksOfType(action.failedChecks, 'Warnings'),
+                errors: extractFailedChecksOfType(
+                    action.failedChecks,
+                    'Errors',
+                ),
+                warnings: extractFailedChecksOfType(
+                    action.failedChecks,
+                    'Warnings',
+                ),
                 source: action.source,
             };
         case UPDATE_SELECTION:
             return {
                 ...state,
                 selectionReplacementContent: action.content,
-                changeSource: 'internal',
+                changeSource: action.changeSource,
             };
         case SET_INITIAL_TRANSLATION:
             return {
@@ -167,13 +172,19 @@ export default function reducer(
             return {
                 ...state,
                 selectionReplacementContent: '',
+                changeSource: 'internal',
+            };
+        case RESET_EDITOR:
+            return {
+                ...initial,
+                isRunningRequest: state.isRunningRequest,
             };
         case UPDATE_MACHINERY_SOURCES:
             return {
                 ...state,
                 machineryTranslation: action.machineryTranslation,
                 machinerySources: action.machinerySources,
-            }
+            };
         default:
             return state;
     }

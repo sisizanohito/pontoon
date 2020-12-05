@@ -90,6 +90,10 @@ comments-AddComment--mention-avatar-alt =
     .alt = User Avatar 
 comments-AddComment--submit-button = <glyph></glyph>
     .title = Submit comment
+comments-Comment--pin-button = PIN
+    .title = Pin comment
+comments-Comment--unpin-button = UNPIN
+    .title = Unpin comment
 
 
 ## Editor Menu
@@ -219,6 +223,9 @@ entitydetails-Metadata--group-comment =
 entitydetails-Metadata--resource-comment =
     .title = Resource Comment
 
+entitydetails-Metadata--pinned-comment =
+    .title = Pinned Comment
+
 entitydetails-Metadata--see-more = See More
 
 entitydetails-Metadata--context =
@@ -230,6 +237,11 @@ entitydetails-Metadata--placeholder =
 entitydetails-Metadata--resource =
     .title = Resource
 
+
+## Entity Details ContextIssueButton
+## Shows the request context or report issue button
+
+entitydetails-ContextIssueButton--context-issue-button = REQUEST CONTEXT or REPORT ISSUE
 
 ## Entity Details GenericOriginalString
 ## Shows the original string of an entity
@@ -256,10 +268,8 @@ history-History--no-translations = No translations available.
 history-Translation--copy =
     .title = Copy Into Translation
 
-history-Translation--hide-diff = Hide diff
-    .title = Hide diff against the currently active translation
-history-Translation--show-diff = Show diff
-    .title = Show diff against the currently active translation
+history-Translation--toggle-diff = Diff
+    .title = Toggle diff against the currently active translation
 
 history-Translation--button-delete =
     .title = Delete
@@ -367,6 +377,19 @@ interactivetour-InteractiveTour--history-content =
     each entry indicate its review status (Approved, Rejected or
     Unreviewed).
 
+interactivetour-InteractiveTour--terms-title = Terms
+interactivetour-InteractiveTour--terms-content =
+    The Terms panel contains specialized words (terms) found in the
+    source string, along with their definitions, usage examples, part
+    of speech and translations. By clicking on a term, its translation
+    gets inserted into the editor.
+
+interactivetour-InteractiveTour--comments-title = Comments
+interactivetour-InteractiveTour--comments-content =
+    In the Comments tab you can discuss how to translate content with
+    your fellow team members. It’s also the place where you can request
+    more context about or report an issue in the source string.
+    
 interactivetour-InteractiveTour--machinery-title = Machinery
 interactivetour-InteractiveTour--machinery-content =
     The Machinery tab shows automated translation suggestions from

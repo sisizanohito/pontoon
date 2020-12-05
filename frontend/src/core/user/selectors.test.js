@@ -1,13 +1,13 @@
 import { _isTranslator } from './selectors';
 
-
 describe('isTranslator', () => {
     it('returns false for non-authenticated users', () => {
         expect(
             _isTranslator(
                 { isAuthenticated: false },
-                { locale: 'mylocale', project: 'myproject' }
-            )
+                { code: 'mylocale' },
+                { slug: 'myproject' },
+            ),
         ).toBeFalsy();
     });
 
@@ -20,8 +20,9 @@ describe('isTranslator', () => {
                     translatorForLocales: [],
                     translatorForProjects: {},
                 },
-                { locale: 'mylocale', project: 'myproject' }
-            )
+                { code: 'mylocale' },
+                { slug: 'myproject' },
+            ),
         ).toBeTruthy();
     });
 
@@ -34,8 +35,9 @@ describe('isTranslator', () => {
                     translatorForLocales: ['mylocale'],
                     translatorForProjects: {},
                 },
-                { locale: 'mylocale', project: 'myproject' }
-            )
+                { code: 'mylocale' },
+                { slug: 'myproject' },
+            ),
         ).toBeTruthy();
     });
 
@@ -48,8 +50,9 @@ describe('isTranslator', () => {
                     translatorForLocales: ['localeB'],
                     translatorForProjects: { 'mylocale-myproject': true },
                 },
-                { locale: 'mylocale', project: 'myproject' }
-            )
+                { code: 'mylocale' },
+                { slug: 'myproject' },
+            ),
         ).toBeTruthy();
     });
 });

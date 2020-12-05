@@ -1,10 +1,8 @@
-from __future__ import absolute_import
-
 import os
+from unittest.mock import call, patch, Mock
 
 import pytest
-from mock import call, patch, Mock
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 
 from pontoon.test.factories import ProjectLocaleFactory
 

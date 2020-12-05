@@ -1,9 +1,7 @@
-from __future__ import absolute_import
+from textwrap import dedent
+from unittest.mock import patch, MagicMock, ANY
 
 import pytest
-
-from textwrap import dedent
-from mock import patch, MagicMock, ANY
 
 from pontoon.checks.libraries import run_checks
 

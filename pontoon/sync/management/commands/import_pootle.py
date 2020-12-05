@@ -1,6 +1,3 @@
-from __future__ import absolute_import
-
-from bulk_update.helper import bulk_update
 from collections import Counter
 from datetime import datetime
 from django.contrib.auth.models import User
@@ -133,7 +130,7 @@ class Command(BaseCommand):
                 )
 
         if users:
-            bulk_update(users)
+            User.objects.bulk_update(users)
 
         for t in translations:
             try:
@@ -159,7 +156,7 @@ class Command(BaseCommand):
             t.approved_date = dateObj
 
         if translations:
-            bulk_update(translations)
+            Translation.objects.bulk_update(translations)
 
         missing_users = Counter(missing_users_list)
         for missing_user in missing_users.keys():

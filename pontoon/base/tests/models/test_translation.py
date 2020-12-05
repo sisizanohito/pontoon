@@ -1,8 +1,6 @@
-from __future__ import absolute_import
+from unittest.mock import patch, call
 
 import pytest
-
-from mock import patch, call
 
 from pontoon.base.models import Project, TranslationMemoryEntry
 from pontoon.test.factories import (

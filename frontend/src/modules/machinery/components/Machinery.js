@@ -11,16 +11,15 @@ import type { Locale } from 'core/locale';
 import type { SourceType } from 'core/api';
 import type { MachineryState } from '..';
 
-
 type Props = {|
     isReadOnlyEditor: boolean,
     locale: ?Locale,
     machinery: MachineryState,
+    addTextToEditorTranslation: (string) => void,
     updateEditorTranslation: (string, string) => void,
     updateMachinerySources: (Array<SourceType>, string) => void,
     searchMachinery: (string) => void,
 |};
-
 
 /**
  * Show translations from machines.
@@ -37,16 +36,39 @@ export default class Machinery extends React.Component<Props> {
         this.searchInput = React.createRef();
     }
 
+    componentDidMount() {
+        const { machinery } = this.props;
+
+        // Restore custom input in search field,
+        // e.g. when switching from Locales tab back to Machinery
+        if (!machinery.entity && machinery.sourceString) {
+            this.searchInput.current.value = machinery.sourceString;
+        }
+    }
+
+    componentDidUpdate(prevProps: Props) {
+        const { machinery } = this.props;
+
+        // Clear search field after switching to a different entity
+        if (machinery.entity && !prevProps.machinery.entity) {
+            this.searchInput.current.value = '';
+        }
+    }
+
+    handleResetSearch = () => {
+        this.props.searchMachinery('');
+    };
+
     submitForm = (event: SyntheticKeyboardEvent<>) => {
         event.preventDefault();
         this.props.searchMachinery(this.searchInput.current.value);
-    }
+    };
 
     render() {
         const {
-            isReadOnlyEditor,
             locale,
             machinery,
+            addTextToEditorTranslation,
             updateEditorTranslation,
             updateMachinerySources,
         } = this.props;
@@ -55,36 +77,55 @@ export default class Machinery extends React.Component<Props> {
             return null;
         }
 
-        return <section className="machinery">
-            <div className="search-wrapper clearfix">
-                <label htmlFor="machinery-search">
-                    <div className="fa fa-search"></div>
-                </label>
-                <form onSubmit={ this.submitForm }>
-                    <Localized id="machinery-Machinery--search-placeholder" attrs={{ placeholder: true }}>
-                        <input
-                            id="machinery-search"
-                            type="search"
-                            autoComplete="off"
-                            placeholder="Search in Machinery"
-                            ref={ this.searchInput }
-                        />
-                    </Localized>
-                </form>
-            </div>
-            <ul>
-                { machinery.translations.map((translation, index) => {
-                    return <Translation
-                        sourceString={ machinery.sourceString }
-                        isReadOnlyEditor={ isReadOnlyEditor }
-                        locale={ locale }
-                        translation={ translation }
-                        updateEditorTranslation={ updateEditorTranslation }
-                        updateMachinerySources={ updateMachinerySources }
-                        key={ index }
-                    />;
-                }) }
-            </ul>
-        </section>;
+        const showResetButton = !machinery.entity && machinery.sourceString;
+
+        return (
+            <section className='machinery'>
+                <div className='search-wrapper clearfix'>
+                    <label htmlFor='machinery-search'>
+                        {showResetButton ? (
+                            <button
+                                className='fa fa-times'
+                                onClick={this.handleResetSearch}
+                            ></button>
+                        ) : (
+                            <div className='fa fa-search'></div>
+                        )}
+                    </label>
+                    <form onSubmit={this.submitForm}>
+                        <Localized
+                            id='machinery-Machinery--search-placeholder'
+                            attrs={{ placeholder: true }}
+                        >
+                            <input
+                                id='machinery-search'
+                                type='search'
+                                autoComplete='off'
+                                placeholder='Search in Machinery'
+                                ref={this.searchInput}
+                            />
+                        </Localized>
+                    </form>
+                </div>
+                <ul>
+                    {machinery.translations.map((translation, index) => {
+                        return (
+                            <Translation
+                                sourceString={machinery.sourceString}
+                                translation={translation}
+                                addTextToEditorTranslation={
+                                    addTextToEditorTranslation
+                                }
+                                updateEditorTranslation={
+                                    updateEditorTranslation
+                                }
+                                updateMachinerySources={updateMachinerySources}
+                                key={index}
+                            />
+                        );
+                    })}
+                </ul>
+            </section>
+        );
     }
 }

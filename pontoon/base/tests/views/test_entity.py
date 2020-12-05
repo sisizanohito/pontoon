@@ -1,10 +1,7 @@
-from __future__ import absolute_import
-
 import json
+from unittest.mock import patch
 
 import pytest
-
-from mock import patch
 
 from pontoon.base.models import Entity, TranslatedResource
 from pontoon.test.factories import (

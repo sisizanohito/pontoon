@@ -2,7 +2,6 @@
 
 import { createSelector } from 'reselect';
 
-
 const pathSelector = (state): string => state.router.location.pathname;
 const querySelector = (state): string => state.router.location.search;
 
@@ -28,7 +27,6 @@ export const getNavigationParams: Function = createSelector(
     querySelector,
     (path: string, query: string): NavigationParams => {
         const parts = path.split('/');
-
         // Because pathname always starts and finishes with a '/',
         // the first and last elements of `parts` are empty strings.
         parts.shift();
@@ -59,9 +57,8 @@ export const getNavigationParams: Function = createSelector(
             author,
             time,
         };
-    }
+    },
 );
-
 
 export default {
     getNavigationParams,

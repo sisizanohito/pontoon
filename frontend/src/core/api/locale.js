@@ -2,7 +2,6 @@
 
 import APIBase from './base';
 
-
 export default class LocaleAPI extends APIBase {
     async get(code: string) {
         const query = `{
@@ -36,6 +35,6 @@ export default class LocaleAPI extends APIBase {
         const headers = new Headers();
         headers.append('X-Requested-With', 'XMLHttpRequest');
 
-        return await this.fetch('/graphql/', 'GET', payload, headers);
+        return await this.fetch('/graphql', 'GET', payload, headers);
     }
 }

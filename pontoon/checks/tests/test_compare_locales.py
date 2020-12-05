@@ -1,12 +1,10 @@
 # coding: utf-8
-from __future__ import absolute_import
-
 import os
 
 from textwrap import dedent
+from unittest.mock import MagicMock
 
 import pytest
-from mock import MagicMock
 
 from pontoon.checks.libraries.compare_locales import (
     CompareDTDEntity,

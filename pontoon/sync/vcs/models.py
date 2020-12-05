@@ -1,20 +1,22 @@
 """
 Models for working with remote translation data stored in a VCS.
 """
-from __future__ import absolute_import
-
 import logging
 import os
 import scandir
 import shutil
 
+import requests
+
+from datetime import datetime
+from itertools import chain
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+
 from compare_locales.paths import (
     ProjectFiles,
     TOMLParser,
 )
-from datetime import datetime
-from itertools import chain
-
 from django.utils import timezone
 from django.utils.functional import cached_property
 
@@ -35,6 +37,59 @@ from pontoon.sync.vcs.repositories import get_changed_files
 
 
 log = logging.getLogger(__name__)
+
+
+class DownloadTOMLParser(TOMLParser):
+    """
+    This wrapper is a workaround for the lack of the shared and persistent filesystem
+    on Heroku workers.
+    Related: https://bugzilla.mozilla.org/show_bug.cgi?id=1530988
+    """
+
+    def __init__(self, checkout_path, permalink_prefix, configuration_file):
+        self.checkout_path = os.path.join(checkout_path, "")
+        self.permalink_prefix = permalink_prefix
+        self.config_path = urlparse(permalink_prefix).path
+        self.config_file = configuration_file
+
+    def get_local_path(self, path):
+        """Return the directory in which the config file should be stored."""
+        local_path = path.replace(self.config_path, "")
+
+        return os.path.join(self.checkout_path, local_path)
+
+    def get_remote_path(self, path):
+        """Construct the link to the remote resource based on the local path."""
+        remote_config_path = path.replace(self.checkout_path, "")
+
+        return urljoin(self.permalink_prefix, remote_config_path)
+
+    def get_project_config(self, path):
+        """Download the project config file and return its local path."""
+        local_path = Path(self.get_local_path(path))
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with local_path.open("wb") as f:
+            remote_path = self.get_remote_path(path)
+            config_file = requests.get(remote_path)
+            config_file.raise_for_status()
+            f.write(config_file.content)
+        return str(local_path)
+
+    def parse(self, path=None, env=None, ignore_missing_includes=True):
+        """Download the config file before it gets parsed."""
+        return super(DownloadTOMLParser, self).parse(
+            self.get_project_config(path or self.config_file),
+            env,
+            ignore_missing_includes,
+        )
+
+
+class MissingRepositoryPermalink(Exception):
+    """
+    Raised when a project uses project config files and
+    its source repository doesn't have the permalink.
+    """
 
 
 class MissingSourceRepository(Exception):
@@ -114,11 +169,17 @@ class VCSProject(object):
 
         self.configuration = None
         if db_project.configuration_file:
+            # Permalink is required to download project config files.
+            if not db_project.source_repository.permalink_prefix:
+                raise MissingRepositoryPermalink()
+
             self.configuration = VCSConfiguration(self)
 
     @cached_property
     def changed_files(self):
-        if self.force:
+        if self.force or (
+            self.db_project.configuration_file and self.changed_config_files
+        ):
             # All files are marked as changed
             return None
 
@@ -204,21 +265,13 @@ class VCSProject(object):
                     )
                 )
 
-                # Find relevant changes in repository by matching changed
-                # paths against locale repository paths
-                locale_path_locales = self.locale_path_locales(repo.checkout_path)
-                locale_paths = locale_path_locales.keys()
-
-                for path in changed_files:
-                    if is_hidden(path):
-                        continue
-
-                    for locale_path in locale_paths:
-                        if path.startswith(locale_path):
-                            locale = locale_path_locales[locale_path]
-                            path = path[len(locale_path) :].lstrip(os.sep)
-                            files.setdefault(path, []).append(locale)
-                            break
+                # Include only relevant (localizable) files
+                if self.configuration:
+                    files = self.get_relevant_files_with_config(changed_files)
+                else:
+                    files = self.get_relevant_files_without_config(
+                        changed_files, self.locale_path_locales(repo.checkout_path)
+                    )
 
         log.info(
             "Changed files in {} repository, relevant for enabled locales: {}".format(
@@ -235,6 +288,63 @@ class VCSProject(object):
 
             else:
                 vcs[path] = vcs[path] if path in vcs else db[path]
+
+        return files
+
+    @cached_property
+    def changed_config_files(self):
+        """
+        A set of the changed project config files.
+        """
+        config_files = set(
+            pc.path.replace(os.path.join(self.source_directory_path, ""), "")
+            for pc in self.configuration.parsed_configuration.configs
+        )
+        changed_files = set(self.changed_source_files[0])
+        return changed_files.intersection(config_files)
+
+    def get_relevant_files_with_config(self, paths):
+        """
+        Check if given paths represent localizable files using project configuration.
+        Return a dict of relative reference paths of such paths and corresponding Locale
+        objects.
+        """
+        files = {}
+
+        for locale in self.db_project.locales.all():
+            for path in paths:
+                absolute_path = os.path.join(self.source_directory_path, path)
+                reference_path = self.configuration.reference_path(
+                    locale, absolute_path
+                )
+
+                if reference_path:
+                    relative_reference_path = reference_path[
+                        len(self.source_directory_path) :
+                    ].lstrip(os.sep)
+                    files.setdefault(relative_reference_path, []).append(locale)
+
+        return files
+
+    def get_relevant_files_without_config(self, paths, locale_path_locales):
+        """
+        Check if given paths represent localizable files by matching them against locale
+        repository paths. Return a dict of relative reference paths of such paths and
+        corresponding Locale objects.
+        """
+        files = {}
+        locale_paths = locale_path_locales.keys()
+
+        for path in paths:
+            if is_hidden(path):
+                continue
+
+            for locale_path in locale_paths:
+                if path.startswith(locale_path):
+                    locale = locale_path_locales[locale_path]
+                    path = path[len(locale_path) :].lstrip(os.sep)
+                    files.setdefault(path, []).append(locale)
+                    break
 
         return files
 
@@ -510,10 +620,6 @@ class VCSConfiguration(object):
     def __init__(self, vcs_project):
         self.vcs_project = vcs_project
         self.configuration_file = vcs_project.db_project.configuration_file
-        self.configuration_path = os.path.join(
-            self.vcs_project.db_project.source_repository.checkout_path,
-            self.configuration_file,
-        )
         self.project_files = {}
 
     @cached_property
@@ -527,9 +633,11 @@ class VCSConfiguration(object):
     @cached_property
     def parsed_configuration(self):
         """Return parsed project configuration file."""
-        return TOMLParser().parse(
-            self.configuration_path, env={"l10n_base": self.l10n_base},
-        )
+        return DownloadTOMLParser(
+            self.vcs_project.db_project.source_repository.checkout_path,
+            self.vcs_project.db_project.source_repository.permalink_prefix,
+            self.configuration_file,
+        ).parse(env={"l10n_base": self.l10n_base})
 
     def add_locale(self, locale_code):
         """
@@ -593,6 +701,15 @@ class VCSConfiguration(object):
 
         m = project_files.match(reference_path)
         return m[0] if m is not None else None
+
+    def reference_path(self, locale, l10n_path):
+        """
+        Return reference path for the given locale and l10n path.
+        """
+        project_files = self.get_or_set_project_files(locale.code)
+
+        m = project_files.match(l10n_path)
+        return m[1] if m is not None else None
 
     def locale_resources(self, locale):
         """
